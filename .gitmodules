@@ -1,0 +1,3 @@
+[submodule "lib/dmalloc"]
+	path = lib/dmalloc
+	url = https://github.com/turbomaster95/dmalloc

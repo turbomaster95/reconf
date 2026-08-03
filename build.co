@@ -1,0 +1,15 @@
+package reconf 0.1.0
+
+set CC      ${CC:-gcc}
+set CFLAGS  -Wall -Wextra -Wno-unused -O3 -std=c99 -nostdlib -fno-builtin
+INCLUDES    -Iinclude/
+
+lib obj/dmalloc.a make -C ../lib/dmalloc CC="$CC" CFLAGS="$CFLAGS" && cp ../lib/dmalloc/build/dmalloc.a obj/
+
+set LDFLAGS obj/dmalloc.a
+
+sources \
+    src/main.c \
+    src/lex.c \
+    src/parser.c \
+    src/cgen.c
