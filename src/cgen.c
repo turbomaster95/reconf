@@ -121,7 +121,7 @@ int generate_configure(const ProjectConfig *cfg, const char *out_path) {
     /* Generate rules.ninja */
     fputs("cat << 'EOF' > build/rules.ninja\n", out);
     fputs("rule compile\n", out);
-    fputs("  command = $CC $CFLAGS $INCLUDES -I../include -I.. -I. -MF $out.d -MMD -MP -c $in -o $out\n", out);
+    fputs("  command = $CC $CFLAGS $INCLUDES -I../include -I.. -I. -MT $out -MF $out.d -MMD -MP -c $in -o $out\n", out);
     fputs("  depfile = $out.d\n", out);
     fputs("  deps = gcc\n", out);
     fputs("  description = Compiling $out\n\n", out);
