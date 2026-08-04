@@ -54,20 +54,12 @@ include rules.ninja
 CC = $CC
 CFLAGS = $CFLAGS
 INCLUDES = $INCLUDES
-
 LDFLAGS = $LDFLAGS
 
 build obj/dmalloc.a: custom_cmd
   cmd = make -C ../lib/dmalloc CC="$CC" CFLAGS="$CFLAGS" && cp ../lib/dmalloc/build/dmalloc.a obj/
 
-build obj/main.o: compile ../src/main.c
-build obj/lex.o: compile ../src/lex.c
-build obj/parser.o: compile ../src/parser.c
-build obj/cgen.o: compile ../src/cgen.c
-
-build reconf: link_bin obj/main.o obj/lex.o obj/parser.o obj/cgen.o obj/dmalloc.a
-
-default reconf
+default
 EOF
 
 echo "Configuration complete. Run 'ninja -C build' to build."

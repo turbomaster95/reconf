@@ -95,16 +95,13 @@ int generate_configure(const ProjectConfig *cfg, const char *out_path) {
         const ConfigItem *it = &cfg->items[i];
         if (it->type == TYPE_HEADER) {
             fprintf(out, "printf \"Checking for <%s>... \"\n", it->arg1);
-            fprintf(out, "cat << 'EOF' > _test.c\n");
-            fprintf(out, "#include <%s>\n", it->arg1);
-            fprintf(out, "int main(void){ return 0; }\n");
-            fprintf(out, "EOF\n");
-            fprintf(out, "if $CC $CFLAGS _test.c -o _test $LDFLAGS >/dev/null 2>&1; then\n");
-            fprintf(out, "  echo \"yes\"; echo \"#define %s 1\" >> build/config.h\n", it->name);
+            fprintf(out, "if printf '#include <%s>\\n' | $CC $CFLAGS $INCLUDES -E - >/dev/null 2>&1; then\n", it->arg1);
+            fprintf(out, "  echo \"yes\"\n");
+            fprintf(out, "  echo \"#define %s 1\" >> build/config.h\n", it->name);
             fprintf(out, "else\n");
-            fprintf(out, "  echo \"no\"; echo \"#define %s 0\" >> build/config.h\n", it->name);
-            fprintf(out, "fi\n");
-            fprintf(out, "rm -f _test.c _test\n\n");
+            fprintf(out, "  echo \"no\"\n");
+            fprintf(out, "  echo \"#define %s 0\" >> build/config.h\n", it->name);
+            fprintf(out, "fi\n\n");
         } else if (it->type == TYPE_CODE) {
             fprintf(out, "printf \"Checking code snippet '%s'... \"\n", it->name);
             fprintf(out, "cat << 'EOF' > _test.c\n");
