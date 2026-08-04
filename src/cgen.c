@@ -186,7 +186,11 @@ int generate_configure(const ProjectConfig *cfg, const char *out_path) {
                     if (dot) *dot = '\0';
 
                     snprintf(obj_path, sizeof(obj_path), "obj/%s_%s.o", tgt_name, base);
-                    fprintf(out, "build %s: compile ../%s\n", obj_path, token);
+		    if (it->order_deps[0] != '\0') {
+	                    fprintf(out, "build %s: compile ../%s | %s\n", obj_path, token, it->order_deps);
+                    } else {
+            	            fprintf(out, "build %s: compile ../%s\n", obj_path, token);
+                    }
 
                     strncat(obj_list, " ", sizeof(obj_list) - strlen(obj_list) - 1);
                     strncat(obj_list, obj_path, sizeof(obj_list) - strlen(obj_list) - 1);

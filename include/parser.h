@@ -26,6 +26,7 @@ typedef struct {
     char name[128];
     char arg1[MAX_ARG];
     char target_sources[MAX_ARG];
+    char order_deps[512];
     char deps[MAX_ARG];
 } ConfigItem;
 

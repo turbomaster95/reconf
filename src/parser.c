@@ -96,6 +96,9 @@ void parse_bld_co(ProjectConfig *cfg, const char *path) {
                 it->type = TYPE_CLEAN;
                 snprintf(it->arg1, sizeof(it->arg1), "%s %s", arg1, trim(arg2));
             }
+        } else if (strcmp(cmd, "order") == 0 && current_target_idx != -1) {
+            ConfigItem *tgt = &cfg->items[current_target_idx];
+            snprintf(tgt->order_deps, sizeof(tgt->order_deps), "%s %s", arg1, trim(arg2));
         } else if (strcmp(cmd, "deps") == 0 && current_target_idx != -1) {
             ConfigItem *tgt = &cfg->items[current_target_idx];
             snprintf(tgt->deps, sizeof(tgt->deps), "%s %s", arg1, trim(arg2));
