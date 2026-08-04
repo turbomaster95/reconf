@@ -132,11 +132,13 @@ int generate_configure(const ProjectConfig *cfg, const char *out_path) {
 
     fputs("rule exec_cmd\n", out);
     fputs("  command = $cmd\n", out);
-    fputs("  description = Running $out\n\n", out);
+    fputs("  description = Running $out\n", out);
+    fputs("  pool = console\n\n", out);
 
     fputs("rule script_cmd\n", out);
     fputs("  command = $cmd\n", out);
-    fputs("  description = Generating $out\n\n", out);
+    fputs("  description = Generating $out\n", out);
+    fputs("  pool = console\n\n", out);
 
     fputs("EOF\n\n", out);
 
