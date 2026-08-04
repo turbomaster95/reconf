@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <cgen.h>
 #include <lexer.h>
 #include <stdio.h>
@@ -6,7 +8,7 @@
 #include <sys/stat.h>
 #include <errno.h>
 
-#define BUF_SIZE 2048
+#define BUF_SIZE 8192
 
 void emit_escaped_code(FILE *out, const char *code) {
     for (const char *p = code; *p; p++) {
@@ -41,12 +43,10 @@ int is_valid_reconf_file(const char *path) {
     const char *ext = strrchr(path, '.');
     if (!ext || strcmp(ext, ".co") != 0) {
         fprintf(stderr, "reconf: warning: '%s' does not have a '.co' extension\n", path);
-        // return 0;
     }
 
     return 1;
 }
-
 
 int generate_configure(const ProjectConfig *cfg, const char *out_path) {
     FILE *out = fopen(out_path, "w");
@@ -64,64 +64,17 @@ int generate_configure(const ProjectConfig *cfg, const char *out_path) {
     fprintf(out, "PACKAGE_NAME=\"%s\"\n", pname);
     fprintf(out, "PACKAGE_VERSION=\"%s\"\n", pver);
 
-    /* Heap-allocated state buffers */
-    char *target_so = malloc(256);
-    char *target_a = malloc(256);
-    char *target_bin = malloc(256);
-    char *sources_raw = malloc(BUF_SIZE);
-    char *obj_list = malloc(BUF_SIZE * 2);
-    char *custom_libs_list = malloc(BUF_SIZE);
-
-    if (!target_so || !target_a || !target_bin || !sources_raw || !obj_list || !custom_libs_list) {
+    char *custom_libs_list = calloc(1, BUF_SIZE);
+    if (!custom_libs_list) {
         fclose(out);
-        free(target_so);
-        free(target_a);
-        free(target_bin);
-        free(sources_raw);
-        free(obj_list);
-        free(custom_libs_list);
         return -1;
     }
-
-    memset(target_so, 0, 256);
-    memset(target_a, 0, 256);
-    memset(target_bin, 0, 256);
-    memset(sources_raw, 0, BUF_SIZE);
-    memset(obj_list, 0, BUF_SIZE * 2);
-    memset(custom_libs_list, 0, BUF_SIZE);
 
     for (int i = 0; i < cfg->item_count; i++) {
         const ConfigItem *it = &cfg->items[i];
         if (it->type == TYPE_VAR) {
             fprintf(out, "%s=\"${%s:-%s}\"\n", it->name, it->name, it->arg1);
-        } else if (it->type == TYPE_TARGET_SO) {
-            size_t len = strlen(it->arg1);
-            if (len >= 256) len = 255;
-            memcpy(target_so, it->arg1, len);
-            target_so[len] = '\0';
-        } else if (it->type == TYPE_TARGET_A) {
-            size_t len = strlen(it->arg1);
-            if (len >= 256) len = 255;
-            memcpy(target_a, it->arg1, len);
-            target_a[len] = '\0';
-        } else if (it->type == TYPE_TARGET_BIN) {
-            size_t len = strlen(it->arg1);
-            if (len >= 256) len = 255;
-            memcpy(target_bin, it->arg1, len);
-            target_bin[len] = '\0';
-        } else if (it->type == TYPE_SOURCES) {
-            size_t len = strlen(it->arg1);
-            if (len >= BUF_SIZE) len = BUF_SIZE - 1;
-            memcpy(sources_raw, it->arg1, len);
-            sources_raw[len] = '\0';
         }
-    }
-
-    if (!target_so[0] && !target_a[0] && !target_bin[0]) {
-        size_t len = strlen(pname);
-        if (len >= 256) len = 255;
-        memcpy(target_bin, pname, len);
-        target_bin[len] = '\0';
     }
 
     fputs("CC=\"${CC:-gcc}\"\n", out);
@@ -199,103 +152,79 @@ int generate_configure(const ProjectConfig *cfg, const char *out_path) {
     fputs("include rules.ninja\n\n", out);
     fprintf(out, "CC = %s\n", "$CC");
     fprintf(out, "CFLAGS = %s\n", "$CFLAGS");
-    fprintf(out, "INCLUDES = %s\n\n", "$INCLUDES");
+    fprintf(out, "INCLUDES = %s\n", "$INCLUDES");
     fprintf(out, "LDFLAGS = %s\n\n", "$LDFLAGS");
 
-    /* Handle custom library build targets (e.g., TYPE_CUSTOM_LIB) */
+    /* Custom sub-libraries */
     for (int i = 0; i < cfg->item_count; i++) {
         const ConfigItem *it = &cfg->items[i];
         if (it->type == TYPE_CUSTOM_LIB) {
             fprintf(out, "build %s: custom_cmd\n", it->name);
             fprintf(out, "  cmd = %s\n\n", it->arg1);
-
-            strcat(custom_libs_list, " ");
-            strcat(custom_libs_list, it->name);
+            strncat(custom_libs_list, " ", BUF_SIZE - strlen(custom_libs_list) - 1);
+            strncat(custom_libs_list, it->name, BUF_SIZE - strlen(custom_libs_list) - 1);
         }
     }
 
-    size_t n = strlen(sources_raw) + 1;
-    char *src_copy = malloc(n);
-    if (!src_copy) {
-        fclose(out);
-        free(target_so);
-        free(target_a);
-        free(target_bin);
-        free(sources_raw);
-        free(obj_list);
-        free(custom_libs_list);
-        return -1;
-    }
-    memcpy(src_copy, sources_raw, n);
+    char *target_names[MAX_ITEMS];
+    int target_count = 0;
 
-    char *token = strtok(src_copy, " \t\r\n");
-    char *base = malloc(256);
-    char *obj_path = malloc(512);
-
-    if (!base || !obj_path) {
-        fclose(out);
-        free(target_so);
-        free(target_a);
-        free(target_bin);
-        free(sources_raw);
-        free(obj_list);
-        free(custom_libs_list);
-        free(src_copy);
-        free(base);
-        free(obj_path);
-        return -1;
-    }
-
-    while (token) {
-        if (strlen(token) > 0) {
-            get_basename(token, base);
-
-            char *dot = strrchr(base, '.');
-            if (dot) *dot = '\0';
-
-            snprintf(obj_path, 512, "obj/%s.o", base);
-
-            fprintf(out, "build %s: compile ../%s\n", obj_path, token);
-
-            strcat(obj_list, " ");
-            strcat(obj_list, obj_path);
+    /* Build rules for targets */
+    for (int i = 0; i < cfg->item_count; i++) {
+        const ConfigItem *it = &cfg->items[i];
+        if (it->type != TYPE_TARGET_BIN && it->type != TYPE_TARGET_SO && it->type != TYPE_TARGET_A) {
+            continue;
         }
-        token = strtok(NULL, " \t\r\n");
+
+        const char *tgt_name = it->arg1;
+        target_names[target_count++] = (char *)tgt_name;
+
+        char obj_list[BUF_SIZE] = "";
+
+        if (it->target_sources[0] != '\0') {
+            char *src_copy = strdup(it->target_sources);
+            char *token = strtok(src_copy, " \t\r\n");
+            char base[256];
+            char obj_path[512];
+
+            while (token) {
+                if (strlen(token) > 0) {
+                    get_basename(token, base);
+                    char *dot = strrchr(base, '.');
+                    if (dot) *dot = '\0';
+
+                    snprintf(obj_path, sizeof(obj_path), "obj/%s_%s.o", tgt_name, base);
+                    fprintf(out, "build %s: compile ../%s\n", obj_path, token);
+
+                    strncat(obj_list, " ", sizeof(obj_list) - strlen(obj_list) - 1);
+                    strncat(obj_list, obj_path, sizeof(obj_list) - strlen(obj_list) - 1);
+                }
+                token = strtok(NULL, " \t\r\n");
+            }
+            free(src_copy);
+        }
+
+        fputs("\n", out);
+        if (it->type == TYPE_TARGET_BIN) {
+            fprintf(out, "build %s: link_bin%s%s\n", tgt_name, obj_list, custom_libs_list);
+        } else if (it->type == TYPE_TARGET_SO) {
+            fprintf(out, "build %s: link_shared%s%s\n", tgt_name, obj_list, custom_libs_list);
+        } else if (it->type == TYPE_TARGET_A) {
+            fprintf(out, "build %s: link_static%s%s\n", tgt_name, obj_list, custom_libs_list);
+        }
+        fputs("\n", out);
     }
 
-    free(src_copy);
-    free(base);
-    free(obj_path);
-
-    fputs("\n", out);
-    if (target_bin[0]) {
-        /* Binaries depend on compiled object files AND custom sub-libraries */
-        fprintf(out, "build %s: link_bin%s%s\n", target_bin, obj_list, custom_libs_list);
+    fprintf(out, "default");
+    for (int i = 0; i < target_count; i++) {
+        fprintf(out, " %s", target_names[i]);
     }
-    if (target_so[0]) {
-        fprintf(out, "build %s: link_shared%s%s\n", target_so, obj_list, custom_libs_list);
-    }
-    if (target_a[0]) {
-        fprintf(out, "build %s: link_static%s%s\n", target_a, obj_list, custom_libs_list);
-    }
-
-    fprintf(out, "\ndefault");
-    if (target_bin[0]) fprintf(out, " %s", target_bin);
-    if (target_so[0])  fprintf(out, " %s", target_so);
-    if (target_a[0])   fprintf(out, " %s", target_a);
     fputs("\n", out);
 
     fputs("EOF\n\n", out);
-
     fputs("echo \"Configuration complete. Run 'ninja -C build' to build.\"\n", out);
 
-    free(target_so);
-    free(target_a);
-    free(target_bin);
-    free(sources_raw);
-    free(obj_list);
     free(custom_libs_list);
-
     fclose(out);
     chmod(out_path, 0755);
     return 0;
