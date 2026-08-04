@@ -6,8 +6,8 @@
 
 void config_init(ProjectConfig *cfg) {
     memset(cfg, 0, sizeof(ProjectConfig));
-    strcpy(cfg->pkg_name, "libapp");
-    strcpy(cfg->pkg_version, "1.0.0");
+    strcpy(cfg->pkg_name, "app");
+    strcpy(cfg->pkg_version, "0.1.0");
 }
 
 void parse_bld_co(ProjectConfig *cfg, const char *path) {
@@ -20,7 +20,6 @@ void parse_bld_co(ProjectConfig *cfg, const char *path) {
     char line[MAX_LINE];
     char multiline_buf[MAX_LINE] = "";
     int in_multiline = 0;
-
     int current_target_idx = -1;
 
     while (fgets(line, sizeof(line), f)) {
@@ -73,13 +72,33 @@ void parse_bld_co(ProjectConfig *cfg, const char *path) {
                 strncpy(it->arg1, trim(arg2), sizeof(it->arg1) - 1);
                 unquote(it->arg1);
             }
-        } else if (strcmp(cmd, "lib") == 0) {
+        } else if (strcmp(cmd, "run") == 0) {
             if (cfg->item_count < MAX_ITEMS) {
                 ConfigItem *it = &cfg->items[cfg->item_count++];
-                it->type = TYPE_CUSTOM_LIB;
+                it->type = TYPE_RUN;
                 strncpy(it->name, arg1, sizeof(it->name) - 1);
                 strncpy(it->arg1, trim(arg2), sizeof(it->arg1) - 1);
+                unquote(it->arg1);
+                current_target_idx = cfg->item_count - 1;
             }
+        } else if (strcmp(cmd, "script") == 0) {
+            if (cfg->item_count < MAX_ITEMS) {
+                ConfigItem *it = &cfg->items[cfg->item_count++];
+                it->type = TYPE_SCRIPT;
+                strncpy(it->name, arg1, sizeof(it->name) - 1);
+                strncpy(it->arg1, trim(arg2), sizeof(it->arg1) - 1);
+                unquote(it->arg1);
+                current_target_idx = cfg->item_count - 1;
+            }
+        } else if (strcmp(cmd, "clean") == 0) {
+            if (cfg->item_count < MAX_ITEMS) {
+                ConfigItem *it = &cfg->items[cfg->item_count++];
+                it->type = TYPE_CLEAN;
+                snprintf(it->arg1, sizeof(it->arg1), "%s %s", arg1, trim(arg2));
+            }
+        } else if (strcmp(cmd, "deps") == 0 && current_target_idx != -1) {
+            ConfigItem *tgt = &cfg->items[current_target_idx];
+            snprintf(tgt->deps, sizeof(tgt->deps), "%s %s", arg1, trim(arg2));
         } else if (strcmp(cmd, "package") == 0) {
             strncpy(cfg->pkg_name, arg1, sizeof(cfg->pkg_name) - 1);
             if (arg2[0]) {
@@ -120,10 +139,6 @@ void parse_bld_co(ProjectConfig *cfg, const char *path) {
                     strncat(tgt->target_sources, " ", sizeof(tgt->target_sources) - strlen(tgt->target_sources) - 1);
                 }
                 strncat(tgt->target_sources, sources_ptr, sizeof(tgt->target_sources) - strlen(tgt->target_sources) - 1);
-            } else if (sources_ptr && cfg->item_count < MAX_ITEMS) {
-                ConfigItem *it = &cfg->items[cfg->item_count++];
-                it->type = TYPE_SOURCES;
-                strncpy(it->arg1, sources_ptr, sizeof(it->arg1) - 1);
             }
         } else if (strcmp(cmd, "INCLUDES") == 0) {
             if (cfg->item_count < MAX_ITEMS) {

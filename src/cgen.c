@@ -1,5 +1,3 @@
-#define _POSIX_C_SOURCE 200809L
-
 #include <cgen.h>
 #include <lexer.h>
 #include <stdio.h>
@@ -63,12 +61,6 @@ int generate_configure(const ProjectConfig *cfg, const char *out_path) {
 
     fprintf(out, "PACKAGE_NAME=\"%s\"\n", pname);
     fprintf(out, "PACKAGE_VERSION=\"%s\"\n", pver);
-
-    char *custom_libs_list = calloc(1, BUF_SIZE);
-    if (!custom_libs_list) {
-        fclose(out);
-        return -1;
-    }
 
     for (int i = 0; i < cfg->item_count; i++) {
         const ConfigItem *it = &cfg->items[i];
@@ -138,9 +130,13 @@ int generate_configure(const ProjectConfig *cfg, const char *out_path) {
     fputs("  command = ar rcs $out $in\n", out);
     fputs("  description = Linking $out\n\n", out);
 
-    fputs("rule custom_cmd\n", out);
+    fputs("rule exec_cmd\n", out);
     fputs("  command = $cmd\n", out);
-    fputs("  description = Building dependency $out (please wait...)\n\n", out);
+    fputs("  description = Running $out\n\n", out);
+
+    fputs("rule script_cmd\n", out);
+    fputs("  command = $cmd\n", out);
+    fputs("  description = Generating $out\n\n", out);
 
     fputs("EOF\n\n", out);
 
@@ -152,21 +148,18 @@ int generate_configure(const ProjectConfig *cfg, const char *out_path) {
     fprintf(out, "INCLUDES = %s\n", "$INCLUDES");
     fprintf(out, "LDFLAGS = %s\n\n", "$LDFLAGS");
 
-    /* Custom sub-libraries */
+    char target_names[MAX_ITEMS][256];
+    int target_count = 0;
+
+    /* Process scripts/generators */
     for (int i = 0; i < cfg->item_count; i++) {
         const ConfigItem *it = &cfg->items[i];
-        if (it->type == TYPE_CUSTOM_LIB) {
-            fprintf(out, "build %s: custom_cmd\n", it->name);
+        if (it->type == TYPE_SCRIPT) {
+            fprintf(out, "build %s: script_cmd %s\n", it->name, it->deps);
             fprintf(out, "  cmd = %s\n\n", it->arg1);
-            strncat(custom_libs_list, " ", BUF_SIZE - strlen(custom_libs_list) - 1);
-            strncat(custom_libs_list, it->name, BUF_SIZE - strlen(custom_libs_list) - 1);
         }
     }
 
-    char *target_names[MAX_ITEMS];
-    int target_count = 0;
-
-    /* Build rules for targets */
     for (int i = 0; i < cfg->item_count; i++) {
         const ConfigItem *it = &cfg->items[i];
         if (it->type != TYPE_TARGET_BIN && it->type != TYPE_TARGET_SO && it->type != TYPE_TARGET_A) {
@@ -174,7 +167,7 @@ int generate_configure(const ProjectConfig *cfg, const char *out_path) {
         }
 
         const char *tgt_name = it->arg1;
-        target_names[target_count++] = (char *)tgt_name;
+        strncpy(target_names[target_count++], tgt_name, 255);
 
         char obj_list[BUF_SIZE] = "";
 
@@ -203,13 +196,22 @@ int generate_configure(const ProjectConfig *cfg, const char *out_path) {
 
         fputs("\n", out);
         if (it->type == TYPE_TARGET_BIN) {
-            fprintf(out, "build %s: link_bin%s%s\n", tgt_name, obj_list, custom_libs_list);
+            fprintf(out, "build %s: link_bin%s %s\n", tgt_name, obj_list, it->deps);
         } else if (it->type == TYPE_TARGET_SO) {
-            fprintf(out, "build %s: link_shared%s%s\n", tgt_name, obj_list, custom_libs_list);
+            fprintf(out, "build %s: link_shared%s %s\n", tgt_name, obj_list, it->deps);
         } else if (it->type == TYPE_TARGET_A) {
-            fprintf(out, "build %s: link_static%s%s\n", tgt_name, obj_list, custom_libs_list);
+            fprintf(out, "build %s: link_static%s %s\n", tgt_name, obj_list, it->deps);
         }
         fputs("\n", out);
+    }
+
+    for (int i = 0; i < cfg->item_count; i++) {
+        const ConfigItem *it = &cfg->items[i];
+        if (it->type == TYPE_RUN) {
+            fprintf(out, "build %s: exec_cmd %s\n", it->name, it->deps);
+            fprintf(out, "  cmd = %s\n\n", it->arg1);
+            fprintf(out, "build %s_alias: phony %s\n\n", it->name, it->name);
+        }
     }
 
     fprintf(out, "default");
@@ -221,7 +223,6 @@ int generate_configure(const ProjectConfig *cfg, const char *out_path) {
     fputs("EOF\n\n", out);
     fputs("echo \"Configuration complete. Run 'ninja -C build' to build.\"\n", out);
 
-    free(custom_libs_list);
     fclose(out);
     chmod(out_path, 0755);
     return 0;

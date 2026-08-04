@@ -15,7 +15,10 @@ typedef enum {
     TYPE_TARGET_BIN,
     TYPE_TARGET_SO,
     TYPE_TARGET_A,
-    TYPE_SOURCES
+    TYPE_SOURCES,
+    TYPE_RUN,
+    TYPE_SCRIPT,
+    TYPE_CLEAN
 } ItemType;
 
 typedef struct {
@@ -23,6 +26,7 @@ typedef struct {
     char name[128];
     char arg1[MAX_ARG];
     char target_sources[MAX_ARG];
+    char deps[MAX_ARG];
 } ConfigItem;
 
 typedef struct {
