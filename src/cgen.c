@@ -140,7 +140,7 @@ int generate_configure(const ProjectConfig *cfg, const char *out_path) {
 
     fputs("rule custom_cmd\n", out);
     fputs("  command = $cmd\n", out);
-    fputs("  description = Running custom rule: $out\n\n", out);
+    fputs("  description = Building dependency $out (please wait...)\n\n", out);
 
     fputs("EOF\n\n", out);
 
