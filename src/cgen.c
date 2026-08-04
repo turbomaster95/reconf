@@ -95,7 +95,7 @@ int generate_configure(const ProjectConfig *cfg, const char *out_path) {
         const ConfigItem *it = &cfg->items[i];
         if (it->type == TYPE_HEADER) {
             fprintf(out, "printf \"Checking for <%s>... \"\n", it->arg1);
-            fprintf(out, "if printf '#include <%s>\\n' | $CC $CFLAGS $INCLUDES -E - >/dev/null 2>&1; then\n", it->arg1);
+            fprintf(out, "if printf '#include <%s>\\n' | $CC $CFLAGS $INCLUDES -MF /dev/null -E - >/dev/null 2>&1; then\n", it->arg1);
             fprintf(out, "  echo \"yes\"\n");
             fprintf(out, "  echo \"#define %s 1\" >> build/config.h\n", it->name);
             fprintf(out, "else\n");
